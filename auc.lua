@@ -1,5 +1,5 @@
--- local server = "ws://192.168.1.191:7071"
-local server = "ws://startendo.org:7071"
+local server = "ws://192.168.1.191:7071"
+-- local server = "ws://startendo.org:7071"
 
 local ws, err = http.websocket(server)
 
@@ -19,6 +19,9 @@ local prefix = ""
 local room = "general"
 local sizechange = {}
 local muted = {}
+local motd = false
+local motdLines = {}
+local motdPage = 1
 
 -- it's me new linity
 local function urldecoding(text)
@@ -169,6 +172,7 @@ local function redraw()
     end
 end
 
+
 pcall(function()
 
     ws.receive()
@@ -254,22 +258,43 @@ pcall(function()
                         message = "<" .. username .. "> " .. content
                     end
                     table.insert(sizechange, message)
-                    local chatHeight = math.max(1, height - 1)
-                    local lines = wrap(message, width)
-                    for i = 1, #lines do
-                        if y > chatHeight then
-                            chat.scroll(1)
-                            y = chatHeight
+                    if not motd then
+                        local chatHeight = math.max(1, height - 1)
+                        local lines = wrap(message, width)
+                        for i = 1, #lines do
+                            if y > chatHeight then
+                                chat.scroll(1)
+                                y = chatHeight
+                            end
+                            chat.setCursorPos(1, y)
+                            chat.write(lines[i])
+                            y = y + 1
                         end
-                        chat.setCursorPos(1, y)
-                        chat.write(lines[i])
-                        y = y + 1
+                    end
+                elseif message:sub(1, 5) == "motd|" or message:sub(1, 6) == "rules|" then
+                    local content = message:match("^.-|(.-)|$")
+                    motd = true
+                    motdLines = wrap(content, width)
+                    motdPage = 1
+                    parent.clear()
+                    for i = 1, height - 1 do
+                        local line = motdLines[motdPage + i - 1]
+                        if line then
+                            parent.setCursorPos(1, i)
+                            parent.write(line)
+                        end
+                    end
+                    parent.setCursorPos(1, height)
+                    if #motdLines > height - 1 then
+                        write("press enter to continue")
+                    else
+                        write("press enter to go back")
                     end
                 end
             end
         end
     end,
-
+        
         function()
             while true do
                 input.clear()
@@ -277,6 +302,29 @@ pcall(function()
                 term.redirect(input)
                 local message = read()
                 term.redirect(parent)
+                if motd then
+                    local pageHeight = height - 1
+                    if motdPage + pageHeight - 1 < #motdLines then
+                        motdPage = motdPage + pageHeight
+                        parent.clear()
+                        for i = 1, height - 1 do
+                            local line = motdLines[motdPage + i - 1]
+                            if line then
+                                parent.setCursorPos(1, i)
+                                parent.write(line)
+                            end
+                        end
+                        parent.setCursorPos(1, height)
+                        if motdPage + height - 2 < #motdLines then
+                            write("press enter to continue")
+                        else
+                            write("press enter to go back")
+                        end
+                    else
+                        motd = false
+                        redraw()
+                    end
+                else
                 -- commands
                 -- rooms
                 if message:sub(1, #prefix + 7) == "/" .. prefix .. "room #" then
@@ -300,12 +348,19 @@ pcall(function()
                     local user = message:sub(#prefix + 10)
                     muted[user] = nil
                     saveMuted()
+                -- motd
+                elseif message == "/" .. prefix .. "motd" then
+                    ws.send("motd|\n")
+                -- rules
+                elseif message == "/" .. prefix .. "rules" then
+                    ws.send("rules|\n")
                 else
                     -- send normally if there's no commands matching
                     ws.send("msg|" .. message .. "|\n")
                 end
-            end
-        end,
+            end    
+        end
+    end,
 
         -- monitor resize fix
         function()

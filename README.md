@@ -15,3 +15,5 @@ this client features
 - auto login through floppy disks
 - muting people (saved onto floppy disks)
 - speaker support
+- displaying motd
+- displaying rules
